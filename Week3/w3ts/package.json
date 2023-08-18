@@ -8,6 +8,7 @@
     "@mui/icons-material": "^5.14.3",
     "@mui/material": "^5.14.5",
     "@mui/styled-engine": "^5.13.2",
+    "@solana/spl-token": "^0.3.8",
     "@solana/wallet-adapter-base": "^0.9.23",
     "@solana/wallet-adapter-react": "^0.15.34",
     "@solana/wallet-adapter-react-ui": "^0.9.33",

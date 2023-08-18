@@ -1,126 +1,189 @@
-import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
-import { ConnectionProvider, WalletProvider, useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { WalletDisconnectButton, WalletModalProvider, WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-
-import "@solana/wallet-adapter-react-ui/styles.css"
-import { PhantomWalletAdapter, SolongWalletAdapter } from "@solana/wallet-adapter-wallets";
-import { LAMPORTS_PER_SOL, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction, clusterApiUrl } from "@solana/web3.js";
-import { useState } from "react";
-
-const TOKEN_PROGRAM_ID= "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-const SPL_TOKEN_ADDR = "CEbaSH6yMvusuEVKrSqteorac3gfWMqA5dCewNFWZb8L"
-const ATA_PUBKEY_KEY = "HczZGUWCBQCbjgaiQUkyJ713fUeSXeQ4uTNKdHhdqcVJ"
-
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js"
+import { AccountLayout, createMint, getAccount, getMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID, transfer } from "@solana/spl-token"
+import { useRef, useState } from "react"
 
 export default function App() {
-  const wallets = [
-    new SolongWalletAdapter(),
-    new PhantomWalletAdapter(),
-  ]
-  const endpoint = clusterApiUrl(WalletAdapterNetwork.Devnet)
-  
-  return <ConnectionProvider endpoint={endpoint}>
-    <WalletProvider wallets={wallets} autoConnect>
-      <WalletModalProvider>
-        <h2>SPL token Transfer Demo</h2>
-        connect wallet:<br/>
-        <WalletMultiButton/>
-        <br/>
-        <br/>
-        Click the button below to disconnect current wallet:
-        <WalletDisconnectButton/>
-        <br/>
-        <br/>
-        <br/>
-        <OperationPage/>
-        </WalletModalProvider>
-      </WalletProvider>
-  </ConnectionProvider>
-}
-
-
-function OperationPage() {
-  const { connection } = useConnection()
-  const { publicKey, sendTransaction } = useWallet();
-
+  const whiteList = ["2P1ZZz3bzYi5yYKDtroCRmPcQoqZRJpBGvhhoeT9Ud15", "HAHGzHj6yo6muNRpNaZvBzbhckjsGCFiBhxFbmCTwazq"]
+  const connection = new Connection("http://192.168.78.129:8899", "confirmed")
+  const [privateKey, setPrivateKey] = useState<string>()
+  const [publicKey, setPublicKey] = useState<PublicKey>()
+  const keypair = useRef<Keypair>()
   const [balance, setBalance] = useState<number>()
-  const onBalance = ()=>{
-    connection.getTokenAccountBalance(new PublicKey(ATA_PUBKEY_KEY)).then((balance)=>{
-      setBalance(balance.value.uiAmount!)
-    })
-  }
-
+  const [token, setToken] = useState<string>()
+  const [tokenStr, setTokenStr] = useState<string>()
+  const [viewPublicKey, setViewPublicKey] = useState<string>()
+  const [toPublicKey, setToPublicKey] = useState<string>()
   const [amount, setAmount] = useState<number>()
+  const [mintPublicKey, setMintPublicKey] = useState<string>()
+
+  const onViewPublicKey = (e: React.ChangeEvent<HTMLInputElement>)=>{
+    setViewPublicKey(e.target.value)
+  }
+  const onToPublicKey = (e: React.ChangeEvent<HTMLInputElement>)=>{
+    setToPublicKey(e.target.value)
+  }
   const onAmount = (e: React.ChangeEvent<HTMLInputElement>)=>{
     setAmount(parseInt(e.target.value) * LAMPORTS_PER_SOL)
   }
 
-  const [toPublicKey, setToPublicKey] = useState<string>()
-  const onToPublicKey = (e: React.ChangeEvent<HTMLInputElement>)=>{
-    setToPublicKey(e.target.value)
+  const onPrivateKey = (e: React.ChangeEvent<HTMLInputElement>)=>{
+    setPrivateKey(e.target.value)
+  }
+
+  const onConnect = ()=>{
+    keypair.current = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(privateKey!)))
+    setPublicKey(keypair.current.publicKey)
+  }
+
+  const onBalance = ()=>{
+    if (connection === undefined) {
+      alert("connect fail")
+    } else {
+      alert("connect success")
+    }
+    connection.getBalance(publicKey!).then((balance)=>{
+      setBalance(balance)
+    })
+  }
+
+  const onCreateToken = async ()=>{
+    const mint = await createMint(
+      connection,
+      keypair.current!,
+      keypair.current!.publicKey!,
+      keypair.current!.publicKey!,
+      9
+    )
+    
+    const t = mint.toBase58()
+    setToken(t)
+    console.log("created token: ", t);
+    setMintPublicKey(t)
+
+    let mintInfo = await getMint(connection, mint)
+    console.log("now, this token's init supply is: ", mintInfo.supply);
+    
+    const tokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      keypair.current!,
+      mint,
+      keypair.current!.publicKey
+    )
+    console.log("a new token account: ", tokenAccount.address.toBase58());
+    
+    let tokenAccountInfo = await getAccount(connection, tokenAccount.address)
+    console.log("this token account amount: ", tokenAccountInfo.amount);
+
+    await mintTo(
+      connection,
+      keypair.current!,
+      mint,
+      tokenAccount.address,
+      keypair.current!,
+      100000000000
+    )
+    mintInfo = await getMint(connection, mint)
+    console.log("now, this token's supply is:", mintInfo.supply);
+    
+    tokenAccountInfo = await getAccount(connection, tokenAccount.address)
+    console.log("now this token account amount: ", tokenAccountInfo.amount);
+  }
+
+
+
+  const onViewTokens = async ()=>{
+    let publicKey: string
+    if (viewPublicKey === undefined) {
+      publicKey = keypair.current?.publicKey!.toString()!
+      console.log("view publickey: ", publicKey);
+    } else {
+      publicKey = new PublicKey(viewPublicKey).toString()
+      console.log("view publickey: ", publicKey);
+    }
+
+    const tokenAccounts = await connection.getTokenAccountsByOwner(
+      new PublicKey(publicKey!),
+      { programId: TOKEN_PROGRAM_ID }
+    )
+    let str = ""
+    tokenAccounts.value.forEach(tokenAccount=>{
+      const accountData = AccountLayout.decode(tokenAccount.account.data)
+      str += `${new PublicKey(accountData.mint)} : ${accountData.amount}\n`
+    })
+    setTokenStr(str)
+    console.log("token list: ", str)
   }
 
   const onTransfer = async ()=>{
-    alert("... wait for transfer " + amount + " token(s) to " + toPublicKey)
+    console.log("transfer "+ amount + " token(s) to " + toPublicKey);
+    const fromATA = await getOrCreateAssociatedTokenAccount(
+      connection,
+      keypair.current!,
+      new PublicKey(mintPublicKey!),
+      keypair.current?.publicKey!
+    )
+    const toAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      keypair.current!,
+      new PublicKey(mintPublicKey!),
+      new PublicKey(toPublicKey!)
+    )
+    const signature = await transfer(
+      connection,
+      keypair.current!,
+      fromATA.address,
+      toAta.address,
+      keypair.current?.publicKey!,
+      amount!
+    )
+    console.log("transfer signature: ", signature);
     
-    const txInstructions = [
-      createTransactionInstruction(
-        new PublicKey(TOKEN_PROGRAM_ID),
-        new PublicKey(ATA_PUBKEY_KEY),
-        new PublicKey(toPublicKey!),
-        new PublicKey(publicKey!),
-        amount!
-      )
-    ]
-
-    const { 
-      context: { slot: minContextSlot }, value: { blockhash } 
-    } = await connection.getLatestBlockhashAndContext()
-
-    const messageV0 = new TransactionMessage({
-      payerKey: publicKey!,
-      instructions: txInstructions,
-      recentBlockhash: blockhash
-    }).compileToV0Message()
-
-    const trx = new VersionedTransaction(messageV0)
-    const signature = await sendTransaction(trx, connection, { minContextSlot })
-    console.log("signature: ", signature)
   }
 
-  const createTransactionInstruction = (
-    programId: PublicKey,
-    source: PublicKey,
-    destination: PublicKey,
-    owner: PublicKey,
-    amount: number
-  )=>{
-    const keys = [
-      { pubkey: source, isSigner: false, isWritable: true },
-      { pubkey: destination, isSigner: false, isWritable: true },
-      { pubkey: owner, isSigner: true, isWritable: false }
-    ]
-    const data = Buffer.alloc(9)
-    data.writeUInt8(3)
-    data.writeBigInt64LE(BigInt(amount), 1)
-    return new TransactionInstruction({ keys, programId, data })
-  }
-  
+
   return <div>
-    <p>
-    <strong>SPL Token addr:</strong><br/>
-    {SPL_TOKEN_ADDR}
-    </p>
-    <label>Balance: {balance}</label><br/>
-    <button onClick={ onBalance }>Query Balance</button>
+    <h1>SPL token Transfer Demo</h1>
+    <label>input private key:</label>
+    <input onChange={ onPrivateKey }/>
+    <button onClick={ onConnect }>connect</button>
     <br/>
     <br/>
+    
+    <label>public key: {publicKey?.toString()}</label>
+    <br/>
+    <br/>
+    <button onClick={ onBalance }>query balance</button>
+    <br/>
+    <br/>
+    <label>balance: {balance}</label>
+    <br/>
+    <br/>
+    
+    <button onClick={ onCreateToken }>create token</button>
+    <label>created token is: {token}</label>
+    <br/>
+    <br/>
+
+    <label><strong>AirDrop WhiteList:</strong></label>
+    <br/>
+    <label>{whiteList.join("\n")}</label>
+    <br/>
+    <br/>
+
     Transfer 
-    <input onChange={ onAmount }/> (token amount)
-    <br/>
+    <input onChange={ onAmount }></input>(amount)
     To 
-    <input onChange={ onToPublicKey }/> (ATA public key)
+    <input onChange={ onToPublicKey }></input>(to PublicKey)
+    <button onClick={ onTransfer } >Transfer</button>
     <br/>
-    <button onClick={ onTransfer }>Transfer</button>
+    <br/>
+
+    <input onChange={ onViewPublicKey }></input>
+    <button onClick={ onViewTokens }>view token balance:</button>
+    <br/>
+    <label>{ tokenStr }</label>
+    <br/>
+    <br/>
+
   </div>
 }
