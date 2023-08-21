@@ -1,0 +1,11 @@
+[package]
+name = "tic_tac_toe"
+version = "0.1.0"
+authors = ["Rust Developer"]
+
+[dependencies]
+termion = "*"
+
+[dev-dependencies]
+assert_ne = "0.3.0"
+assert_cli = "0.5"
