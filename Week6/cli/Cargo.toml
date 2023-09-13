@@ -1,0 +1,16 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+solana-program = "1.16.5"
+solana-rpc-client = "1.16.5"
+solana-rpc-client-api = "1.16.5"
+borsh = "0.10"
+num-derive = "0.3.3"
+thiserror = "1.0.40"
+num-traits = "0.2"
+solana-sdk = "1.16.5"
